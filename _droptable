@@ -1,0 +1,36 @@
+#!/bin/bash
+
+# Keeping the user in loop until they enter table name(s)
+while :; do
+    echo "Enter the names of the tables to drop (separated by spaces): "
+    read -a TABLE_NAMES
+
+    if [ "${#TABLE_NAMES[@]}" -eq 0 ]; then
+        echo "Error: No table names provided. Please try again."
+    else
+        break
+    fi
+done
+
+# Deleting the table(s) file(s) provided by the user while checking if they exist or not
+for TABLE_NAME in "${TABLE_NAMES[@]}"; do
+    TABLE_FILE="./$TABLE_NAME"
+
+    if [ -e "$TABLE_FILE" ]; then
+        rm "$TABLE_FILE"
+        echo "Table '$TABLE_NAME' has been dropped."
+    else
+        echo "Error: Table '$TABLE_NAME' does not exist."
+    fi
+done
+
+# Wating for the user to type 'exit' to return to the main menu
+echo -e "\nEnter 'exit' to return to menu"
+
+while :; do
+    read EXIT
+    if [[ "${EXIT,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+done

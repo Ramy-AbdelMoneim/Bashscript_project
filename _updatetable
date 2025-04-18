@@ -1,0 +1,232 @@
+#!/bin/bash
+
+# Function to check if input is a valid integer
+isInt() {
+    local var="$1"
+    if [[ "$var" =~ ^-?[0-9]+$ ]] && [[ ! "$var" =~ \. ]]; then
+        return 1  # Success (valid integer)
+    else
+        echo "Error: Enter a valid integer (e.g., -123, 0, 456)."
+        return 0  # Failure (not a valid integer)
+    fi
+}
+
+# Function to check if input is a valid float
+isFloat() {
+    local var="$1"
+    if [[ "$var" =~ ^-?[0-9]*\.[0-9]+$ ]]; then
+        return 1  # Success (valid float)
+    else
+        echo "Error: Enter a valid float (e.g., -123.45, 0.0, 456)."
+        return 0  # Failure (not a valid float)
+    fi
+}
+
+# Function to check if input is a valid single character
+isChar() {
+    local var="$1"
+    if [[ "${#var}" -eq 1 ]]; then
+        return 1  # Success (valid character)
+    else
+        echo "Error: Enter a single character (e.g., a, b, 1, @)."
+        return 0  # Failure (not a valid character)
+    fi
+}
+
+# Function to check if input is a non-empty string
+isString() {
+    local var="$1"
+    if [[ -n "$var" ]]; then
+        return 1  # Success (non-empty string)
+    else
+        echo "Error: Enter a non-empty string."
+        return 0  # Failure (empty string)
+    fi
+}
+
+# Function to check if input is a valid boolean (0 or 1)
+isBoolean() {
+    local var="$1"
+    if [[ "$var" == "0" || "$var" == "1" ]]; then
+        return 1  # Success (valid boolean)
+    else
+        echo "Error: Enter a valid boolean (0 or 1)."
+        return 0  # Failure (not a valid boolean)
+    fi
+}
+
+valueExist() {
+    local prim=$1
+    local var=$2
+    shift 2
+    local data=("$@")  # Accept data as an array (each row is an element)
+
+    for row in "${data[@]}"; do
+        IFS=',' read -r -a fields <<< "$row"  # Split row into fields
+        if [[ "${fields[$((prim-1))]}" == "$var" ]]; then
+            return 0  # Duplicate found
+        fi
+    done
+    return 1  # No duplicate found
+}
+
+# Keeping the user in loop until they enter a valid table name or typing 'exit' to return to the main menu
+
+while :; do
+    read -p "Enter the table name (or 'exit' to return to menu): " TABLE_NAME
+    TABLE_PATH="./$TABLE_NAME"
+
+    if [[ "${TABLE_NAME,,}" == "exit" ]]; then
+        menu.sh
+        break
+    fi
+
+    if [[ -f "$TABLE_PATH" ]]; then
+        echo "Table '$TABLE_NAME' found."
+        break
+    else
+        echo "Error: Table '$TABLE_NAME' does not exist. Please try again."
+    fi
+done
+
+# Separate meta-data and actual data
+META=$(head -n 1 "$TABLE_PATH")
+IFS=',' read -r -a COLUMNS <<< "$META"
+PRIMARY_KEY=$(head -n 2 "$TABLE_PATH" | tail -n 1 | cut -d= -f2)
+DATA=$(tail -n +3 "$TABLE_PATH")
+
+# Separate the column names and data types
+COL_NAMES=()
+DATA_TYPE=()
+for col in "${COLUMNS[@]}"; do
+    COL_NAMES+=("${col%%:*}")
+    DATA_TYPE+=("${col#*:}")
+done
+
+# Creating an associative array for column indexes
+COL_INDEX=()
+for i in "${!COL_NAMES[@]}"; do
+    COL_INDEX[i]=$((i+1))
+done
+
+# Read the condition for selecting rows
+read -p "Enter the condition (e.g., id >= 2) (or 'exit' to return to menu): " AWK_CONDITION
+if [[ "${AWK_CONDITION,,}" == "exit" ]]; then
+    menu.sh
+fi
+
+# Modifying the condition to replace the column names with their prespective number 
+for i in "${!COL_NAMES[@]}"; do
+    AWK_CONDITION="${AWK_CONDITION//${COL_NAMES[i]}/\$$((COL_INDEX[i]))}"
+done
+
+# Extracting the rows that meet the condition
+SELECTED_ROWS=()
+while IFS= read -r line; do
+    SELECTED_ROWS+=("$line")
+done < <(
+    awk -F',' '
+        BEGIN { OFS = "," }
+
+        ('"$AWK_CONDITION"') { print $0 } # Print rows not matching the condition
+    ' <<< "$DATA"
+)
+
+# Counting the number of rows
+SELECTED_ROWS_COUNT=${#SELECTED_ROWS[@]}
+
+# Extracting the rows that NOT meet the condition
+OTHER_ROWS=()
+while IFS= read -r line; do
+    OTHER_ROWS+=("$line")
+done < <(
+    awk -F',' '
+        BEGIN { OFS = "," }
+
+        !('"$AWK_CONDITION"') { print $0 } # Print rows not matching the condition
+    ' <<< "$DATA"
+)
+
+echo "----------------------------------------------------"
+for col in "${!COL_INDEX[@]}"; do
+    # Preventing the user from updating the primary key of multiple rows to the same value
+    if [[ $SELECTED_ROWS_COUNT -gt 1 && ${COL_INDEX[$col]} -eq $PRIMARY_KEY ]]; then
+        echo "You cannot change the primary key column (${COL_NAMES[$col]}) value in multiple rows."
+        echo "----------------------------------------------------"
+        continue
+    fi
+    
+
+    # Giving the user the option to edit the column or to skip it
+    read -p "Would you like to change the column '${COL_NAMES[$col]}'? (y/n): " change
+
+    [[ ! "${change,,}" == "y" ]] && continue
+
+    # Keeping the user in a loop until a valid value is given
+    while :; do
+        read -p "Enter new value for ${COL_NAMES[$col]} ${DATA_TYPE[$col]}: " new_value
+
+        # Validate the value based on the data type
+        case "${DATA_TYPE[$col]}" in
+            "int")
+                isInt "$new_value"
+                ;;
+            "float")
+                isFloat "$new_value"
+                ;;
+            "char")
+                isChar "$new_value"
+                ;;
+            "string")
+                isString "$new_value"
+                ;;
+            "boolean")
+                isBoolean "$new_value"
+                ;;
+        esac
+
+        if [[ $? -eq 1 ]]; then
+            # Check if it's the primary key and ensure uniqueness
+            if [[ ${COL_INDEX[$col]} -eq $PRIMARY_KEY ]]; then
+                valueExist "$PRIMARY_KEY" "$new_value" "${OTHER_ROWS[@]}"
+                if [[ $? -eq 0 ]]; then
+                    echo "Error: The value '$new_value' already exists in other rows. Please enter a unique value."
+                    continue
+                else
+                    break
+                fi
+            else
+                break
+            fi
+        fi
+    done
+
+    # Update the selected rows with the new value
+    for i in "${!SELECTED_ROWS[@]}"; do
+        IFS=',' read -r -a FIELDS <<< "${SELECTED_ROWS[$i]}"
+        FIELDS[$col]=$new_value
+        SELECTED_ROWS[$i]=$(IFS=','; echo "${FIELDS[*]}")
+    done
+    echo "----------------------------------------------------"
+done
+
+# Pushing the data back to the table file
+echo "$META" > "$TABLE_PATH"
+echo "primary_key=$PRIMARY_KEY" >> "$TABLE_PATH"
+for row in "${OTHER_ROWS[@]}"; do
+    echo "$row" >> "$TABLE_PATH"
+done
+for row in "${SELECTED_ROWS[@]}"; do
+    echo "$row" >> "$TABLE_PATH"
+done
+
+# Wating for the user to type 'exit' to return to the main menu
+echo -e "\nData has been updated successfully!!\nEnter 'exit' to return to menu"
+
+while :; do
+    read exit
+    if [[ "${exit,,}" == "exit" ]]; then
+        menu.sh
+        break
+    fi
+done

@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Listing the databases dirs
+DATABASES=(*)
+
+# Checking if there is any database stored
+if [ -z "$DATABASES" ]; then
+    echo "No databases available."
+# Printing the available databases names when there is one or more available
+else
+    echo -e "---------------------------------\nDatabases available:\n---------------------------------"
+    for DATABASE in ${DATABASES[@]}; do
+        # Check if it is a file (representing a table)
+        if [ -d "$DATABASE" ]; then
+            echo "$DATABASE"
+            echo "--------------"
+        fi
+    done
+fi
+
+# Wating for the user to type 'exit' to return to the main menu
+while :; do
+    echo "Type 'exit' to return to the main menu:"
+    read EXIT
+
+    if [ "${EXIT,,}" == "exit" ]; then
+        system.sh
+        break
+    fi
+done

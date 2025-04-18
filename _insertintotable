@@ -1,0 +1,174 @@
+#!/bin/bash
+
+# Function to check if input is a valid integer
+isInt() {
+    local var="$1"
+    if [[ "$var" =~ ^-?[0-9]+$ ]] && [[ ! "$var" =~ \. ]]; then
+        return 1  # Success (valid integer)
+    else
+        echo "Error: Enter a valid integer (e.g., -123, 0, 456)."
+        return 0  # Failure (not a valid integer)
+    fi
+}
+
+# Function to check if input is a valid float
+isFloat() {
+    local var="$1"
+    if [[ "$var" =~ ^-?[0-9]*\.[0-9]+$ ]]; then
+        return 1  # Success (valid float)
+    else
+        echo "Error: Enter a valid float (e.g., -123.45, 0.0, 456)."
+        return 0  # Failure (not a valid float)
+    fi
+}
+
+# Function to check if input is a valid single character
+isChar() {
+    local var="$1"
+    if [[ "${#var}" -eq 1 ]]; then
+        return 1  # Success (valid character)
+    else
+        echo "Error: Enter a single character (e.g., a, b, 1, @)."
+        return 0  # Failure (not a valid character)
+    fi
+}
+
+# Function to check if input is a non-empty string
+isString() {
+    local var="$1"
+    if [[ -n "$var" ]]; then
+        return 1  # Success (non-empty string)
+    else
+        echo "Error: Enter a non-empty string."
+        return 0  # Failure (empty string)
+    fi
+}
+
+# Function to check if input is a valid boolean (0 or 1)
+isBoolean() {
+    local var="$1"
+    if [[ "$var" == "0" || "$var" == "1" ]]; then
+        return 1  # Success (valid boolean)
+    else
+        echo "Error: Enter a valid boolean (0 or 1)."
+        return 0  # Failure (not a valid boolean)
+    fi
+}
+
+# Function to check for primary key duplication using existing data
+valueExist() {
+    local prim=$1
+    local var=$2
+    local data=$3
+    # Iterate over each line of data
+    while IFS=',' read -r -a row; do
+        if [[ ${row[$prim-1]} == "$var" ]]; then
+            return 0  # Duplicate found (exit status 0 means duplicate)
+        fi
+    done <<< "$data"
+    return 1  # No duplicate found (exit status 1 means no duplicate)
+}
+
+# Keeping the user in loop until they enter a valid table name
+while :; do
+    read -p "Enter the table name (or 'exit' to return to menu): " TABLE_NAME
+    TABLE_PATH="./$TABLE_NAME"
+
+    if [[ "${TABLE_NAME,,}" == "exit" ]]; then
+        menu.sh
+        break
+    fi
+
+    if [[ -f "$TABLE_PATH" ]]; then
+        echo "Table '$TABLE_NAME' found."
+        break
+    else
+        echo "Error: Table '$TABLE_NAME' does not exist. Please try again."
+    fi
+done
+
+# Splitting the file content into meta data, primary key and actual data
+PRIMARY_KEY=$(head -n 2 "$TABLE_PATH" | tail -n 1 | cut -d= -f2)
+META=$(head -n 1 "$TABLE_PATH")
+IFS=',' read -r -a COLUMNS <<< "$META"
+DATA=$(tail -n +3 "$TABLE_PATH")
+
+# Extract column names and data types
+COL_NAMES=()
+DATA_TYPE=()
+COUNT=0
+for col in "${COLUMNS[@]}"; do
+    COL_NAMES+=("${col%%:*}")
+    DATA_TYPE+=("${col#*:}")
+    ((COUNT++))
+done
+
+echo "Enter $TABLE_NAME data:"
+
+# Input validation and primary key check loop
+OUTPUT=""
+for i in $(seq 0 $((COUNT - 1))); do
+    while :; do
+        read -p "${COL_NAMES[i]} (${DATA_TYPE[i]}): " VAR
+        FLAG=0
+
+        # Validating the data type
+        case ${DATA_TYPE[i]} in
+            int)
+                isInt "$VAR"
+                FLAG=$?
+                ;;
+            float)
+                isFloat "$VAR"
+                FLAG=$?
+                ;;
+            char)
+                isChar "$VAR"
+                FLAG=$?
+                ;;
+            string)
+                isString "$VAR"
+                FLAG=$?
+                ;;
+            boolean)
+                isBoolean "$VAR"
+                FLAG=$?
+                ;;       
+        esac
+
+        # Check if the current column is the primary key column before checking for duplicates
+        if [[ $((i+1)) -eq $PRIMARY_KEY ]]; then
+            # Checking for duplicates
+            valueExist $PRIMARY_KEY "$VAR" "$DATA"
+            if [[ $? -eq 0 ]]; then
+                echo "The primary key value '$VAR' already exists. Please enter a new one."
+                continue
+            fi
+        fi
+
+        if [[ $FLAG -eq 1 ]]; then
+            # Append value to the output, separating by commas
+            if [[ -z "$OUTPUT" ]]; then
+                OUTPUT="$VAR"
+            else
+                OUTPUT="$OUTPUT,$VAR"
+            fi
+            break
+        fi
+    done
+done
+
+# Appending the data to the table
+echo "The data was added successfuly"
+echo "$OUTPUT" >> "$TABLE_PATH"
+
+# Wating for the user to type 'exit' to return to the main menu
+echo -e "\nEnter 'exit' to return to menu"
+
+while :; do
+    read EXIT
+    if [[ "${EXIT,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+done

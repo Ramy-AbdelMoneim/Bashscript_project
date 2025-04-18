@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Function to validate column names
+validateColumnName() {
+    local NAME="$1"
+    if [[ "$NAME" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        return 1  # Success
+    else
+        echo "Error: Invalid column name '$NAME'. Column names must start with a letter or underscore and can contain letters, digits, and underscores."
+        return 0  # Failure
+    fi
+}
+
+# Function to validate data types
+validateDataType() {
+    local TYPE="${1,,}"
+    if [[ "$TYPE" =~ ^(int|float|char|string|boolean)$ ]]; then
+        return 1  # Success
+    else
+        echo "Error: Invalid data type '$TYPE'. Allowed types are int, float, char, string, and boolean."
+        return 0  # Failure
+    fi
+}
+
+# ACTUAL SCRIPT
+
+# Keeping the user in loop until a valid table name is submitted
+while :; do
+    read -p "Enter the table name (or 'exit' to return to menu): " TABLE_NAME
+    [[ "${TABLE_NAME,,}" == "exit" ]] && . menu.sh
+
+    # Check if table already exists
+    if [[ -f "$TABLE_NAME" ]]; then
+        echo "Error: Table '$TABLE_NAME' already exists."
+    else
+        break
+    fi
+done
+
+SCHEMA=""
+COLUMNS=0
+COLUMN_NAMES=()
+
+while :; do
+    # 1 Based system
+    ((COLUMNS++))  
+
+    # Reading the column name
+    read -p "Enter column name $COLUMNS (or 'exit' to return to menu): " COL_NAME
+    [[ "${COL_NAME,,}" == "exit" ]] && . menu.sh
+
+    # Checking for duplicate column names
+    if [[ " ${COLUMN_NAMES[@]} " =~ " $COL_NAME " ]]; then
+        echo "Error: Column name '$COL_NAME' is already used. Please enter a unique column name."
+        ((COLUMNS--))
+        continue
+    fi
+
+    # Checking if the column name meets the standards
+    validateColumnName "$COL_NAME"
+    if [[ $? -eq 0 ]]; then
+        ((COLUMNS--))
+        continue
+    fi
+
+    # Adding column name to the list
+    COLUMN_NAMES+=("$COL_NAME")  
+
+    while :; do
+    # Reading the column data type
+        read -p "Enter data type for column '$COL_NAME' (or 'exit' to return to menu): " COL_TYPE
+        [[ "${COL_TYPE,,}" == "exit" ]] && . menu.sh
+
+        # Checking if the column data type meets the standards
+        validateDataType "$COL_TYPE"
+        if [[ $? -eq 0 ]]; then
+            continue
+        else
+            break
+        fi
+    done
+
+    # Adding new column to schema
+    if [[ -z "$SCHEMA" ]]; then
+        SCHEMA="$COL_NAME:${COL_TYPE,,}"
+    else
+        SCHEMA="$SCHEMA,$COL_NAME:${COL_TYPE,,}"
+    fi
+
+    # Giving the user the choice to add another columns or appending or existing 
+    echo  "----------------------------------------"
+    while :; do
+        read -p "Do you want to add another column? (y/n/exit): " CHOICE
+        case "${CHOICE,,}" in
+            # Adding another column if "y" was entered
+            y)
+                break  
+                ;;
+            # Stop adding columns if "n" was entered
+            n)
+                break 2
+                ;;
+            exit)
+                . menu.sh
+                ;;
+            *)
+                continue
+                ;;
+        esac
+    done
+    # Adding an empty line for better readability
+done
+
+# Keeping the user in loop until a valid primary key is entered
+while :; do
+    # Add an empty line for better readability
+    echo
+
+    read -p "Enter the primary key column number (1-$COLUMNS) (or 'exit' to return to menu): " PRIMARY_KEY
+    [[ "${PRIMARY_KEY,,}" == "exit" ]] && . menu.sh
+
+    # Making sure that the user enters a number between 1 and ${COLUMNS} and printing an error messege if not
+    if [[ "$PRIMARY_KEY" =~ ^[0-9]+$ && "$PRIMARY_KEY" -ge 1 && "$PRIMARY_KEY" -le "$COLUMNS" ]]; then
+        break
+    else
+        echo "Error: Invalid primary key. Please enter a number between 1 and $COLUMNS."
+    fi
+done
+
+# Write schema and primary key to the table file
+echo "$SCHEMA" > "$TABLE_NAME"
+echo "primary_key=$PRIMARY_KEY" >> "$TABLE_NAME"
+echo "Table '$TABLE_NAME' created successfully!"
+
+# Wating for the user to type 'exit' to return to the main menu
+while :; do
+    echo "Type 'exit' to return to the main menu:"
+    read EXIT
+
+    if [ "${EXIT,,}" == "exit" ]; then
+        . menu.sh
+        break
+    fi
+done

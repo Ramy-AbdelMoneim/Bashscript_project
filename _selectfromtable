@@ -1,0 +1,128 @@
+#!/bin/bash
+
+while :; do
+    # Reading the table name and creating the path
+    read -p "Enter the table name (or 'exit' to return to menu): " TABLE_NAME
+    TABLE_PATH="./$TABLE_NAME"
+
+    # Redirecting the user to the previous menu if "exit" was typed
+    if [[ "${TABLE_NAME,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+
+    # Making sure that the table exist
+    if [[ -f "$TABLE_PATH" ]]; then
+        echo "Table '$TABLE_NAME' found."
+        break
+    else
+        echo "Error: Table '$TABLE_NAME' does not exist. Please try again."
+    fi
+
+done
+
+# Separating the meta data from the actual data
+META=$(head -n 1 "$TABLE_PATH")
+IFS=',' read -r -a COLUMNS <<< "$META"
+
+# Separating the column names from the data type
+COL_NAMES=()
+for col in "${COLUMNS[@]}"; do
+    COL_NAMES+=("${col%%:*}")
+done
+
+echo "Available columns: ${COL_NAMES[*]}"
+
+while :; do
+    # Asking the user for the columns that are needed to be displayed
+    read -p "Enter the column names to display comma-separated (or 'exit' to return to menu): " INPUT_COLUMNS
+    
+    # Redirecting the user to the previous menu if "exit" was typed
+    if [[ "${INPUT_COLUMNS,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+
+    # Creating an array of the columns specified
+    IFS=',' read -r -a SELECTED_COLUMNS <<< "$INPUT_COLUMNS"
+
+    # Validating the selected columns
+    INVALID_COLUMNS=()
+    for col in "${SELECTED_COLUMNS[@]}"; do
+        if [[ ! " ${COL_NAMES[*]} " =~ " $col " ]]; then
+            INVALID_COLUMNS+=("$col")
+        fi
+    done
+
+    if [[ ${#INVALID_COLUMNS[@]} -ne 0 ]]; then
+        echo "Error: Invalid columns specified - ${INVALID_COLUMNS[*]}"
+    else
+        break
+    fi
+done
+
+# Reading the condition
+read -p "Enter the condition (e.g., id >= 2) (or 'exit' to return to menu): " CONDITION
+
+# Redirecting the user to the previous menu if "exit" was typed
+if [[ "${CONDITION,,}" == "exit" ]]; then
+        . menu.sh
+fi
+
+# Modifying the condition to replace the column names with their prespective number 
+AWK_CONDITION="$CONDITION"
+for i in "${!COL_NAMES[@]}"; do
+    AWK_CONDITION="${AWK_CONDITION//${COL_NAMES[i]}/\$$(($i + 1))}"
+done
+
+# Creating an associative array to map each column to an index "COL_INDEX["id"]=0".
+declare -A COL_INDEX
+for i in "${!COL_NAMES[@]}"; do
+    COL_INDEX["${COL_NAMES[i]}"]=$i
+done
+
+# Creating an array to map each column selected by the user to an index.
+SELECTED_INDICES=()
+for col in "${SELECTED_COLUMNS[@]}"; do
+    SELECTED_INDICES+=("${COL_INDEX[$col]}")
+done
+
+echo "-------------------------------------------"
+echo ${SELECTED_COLUMNS[*]}
+echo "-------------------------------------------"
+
+tail -n +3 "$TABLE_PATH" | while IFS=',' read -r -a ROW; do
+    # Convert the ROW array into a comma-separated string for awk
+    ROW_STRING=$(IFS=','; echo "${ROW[*]}")
+    
+    # Evaluate the condition and print the selected columns
+    awk -F',' -v indices="${SELECTED_INDICES[*]}" '
+        BEGIN {
+            split(indices, index_array, " ")
+        }
+        {
+            if ('"$AWK_CONDITION"') {
+                output = ""
+                for (i in index_array) {
+                    idx = index_array[i]  # Get the column index
+                    output = output (output == "" ? "" : " ") $(idx + 1)
+                }
+                print output
+            }
+        }
+    ' <<< "$ROW_STRING"
+done
+
+# test case
+# age >= 28 || name == "Abdelrahman"
+
+# Wating for the user to type 'exit' to return to the main menu
+echo -e "\nEnter 'exit' to return to menu"
+
+while :; do
+    read EXIT
+    if [[ "${EXIT,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+done

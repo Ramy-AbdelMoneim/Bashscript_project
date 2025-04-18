@@ -1,0 +1,98 @@
+#!/bin/bash
+
+while :; do
+    # Reading the table name and creating the path
+    read -p "Enter the table name (or 'exit' to return to menu): " TABLE_NAME
+    TABLE_PATH="./$TABLE_NAME"
+
+    # Redirecting the user to the previous menu if "exit" was typed
+    if [[ "${TABLE_NAME,,}" == "exit" ]]; then
+        menu.sh
+        break
+    fi
+
+    # Making sure that the table exists
+    if [[ -f "$TABLE_PATH" ]]; then
+        echo "Table '$TABLE_NAME' found."
+        break
+    else
+        echo "Error: Table '$TABLE_NAME' does not exist. Please try again."
+    fi
+done
+
+# Read the metadata (first line) of the table
+META=$(head -n 1 "$TABLE_PATH")
+# Split metadata into array of columns
+IFS=',' read -r -a COLUMNS <<< "$META"
+# Count the total number of lines in the table
+TABLELINES=$(wc -l < "$TABLE_PATH")
+
+# Extract column names from metadata
+COL_NAMES=()
+for col in "${COLUMNS[@]}"; do
+    # Extract column names before the colon
+    COL_NAMES+=("${col%%:*}")
+done
+
+# Showing to the user the available columns
+echo "Available columns: ${COL_NAMES[*]}"
+
+# Asking the user for the condition that the data need to meet
+read -p "Enter the condition (e.g., age > 25) (or 'exit' to return to menu): " CONDITION
+
+# Redirecting the user to the previous menu if "exit" was typed
+if [[ "${CONDITION,,}" == "exit" ]]; then
+    menu.sh
+fi
+
+# Replace column names with awk field variables in the condition
+AWK_CONDITION="$CONDITION"
+for i in "${!COL_NAMES[@]}"; do
+    AWK_CONDITION="${AWK_CONDITION//${COL_NAMES[i]}/\$$(($i + 1))}"
+done
+
+# Initialize an array to store the filtered table
+FILTERED_TABLE=()
+
+# Use awk to process the table and store the output into the array
+while IFS= read -r line; do
+    FILTERED_TABLE+=("$line")
+done < <(
+    awk -F',' '
+        BEGIN { OFS = "," }
+        NR == 1 || NR == 2 { print; next } # Always print the header and metadata
+
+        !('"$AWK_CONDITION"') { print $0 } # Print rows not matching the condition
+    ' "$TABLE_PATH"
+)
+
+# Replace the original table content with the filtered content
+{
+    for row in "${FILTERED_TABLE[@]}"; do
+        echo "$row"
+    done
+} > "$TABLE_PATH"
+
+# Calculate the number of deleted rows
+UPDATEDTABLE=${#FILTERED_TABLE[@]}
+DELETED=$((TABLELINES - UPDATEDTABLE))
+
+# Output the result
+echo "$DELETED Row(s) matching the condition have been deleted from '$TABLE_NAME'."
+
+# Wating for the user to type 'exit' to return to the main menu
+echo -e "\nEnter 'exit' to return to menu"
+
+while :; do
+    read EXIT
+    if [[ "${EXIT,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+done
+
+# Optional: Printing the filtered table for debugging
+# echo "Filtered table:"
+# for row in "${FILTERED_TABLE[@]}"; do
+#    echo "$row"
+# done

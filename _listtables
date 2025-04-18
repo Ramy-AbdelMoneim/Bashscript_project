@@ -1,0 +1,33 @@
+#!/bin/bash
+
+TABLES=(*)
+
+echo -e "Table name:\n---------------------"
+for TABLE in ${TABLES[@]}; do
+    # Check if it is a file (representing a table)
+    if [ -f "$TABLE" ]; then
+        # Read the first and second lines of the file
+        # META=$(sed -n '1p' "$TABLE")
+        # SECOND_LINE=$(sed -n '2p' "$TABLE")
+        
+        # Extract the primary key value (the number after '=')
+        # PRIMARY_KEY=${SECOND_LINE#*=}
+
+        # Format and print the output
+        echo "$TABLE"
+        # echo "  Schema: $META"
+        # echo "  Primary Key: $PRIMARY_KEY"
+        echo "--------------"
+    fi
+done
+
+# Wating for the user to type 'exit' to return to the main menu
+echo -e "\nEnter 'exit' to return to menu"
+
+while :; do
+    read EXIT
+    if [[ "${EXIT,,}" == "exit" ]]; then
+        . menu.sh
+        break
+    fi
+done

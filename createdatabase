@@ -1,0 +1,38 @@
+#!/bin/bash
+
+# Keeping the user in loop until they enter a valid database name or typing 'exit' to return to the main menu
+while :; do
+    echo "Enter database name or type 'exit' to return to the main menu:"
+    read DATABASE_NAME
+    # Changing the DB name to uppercase to avoid creating two databases with the same name but with different letters cases
+    DATABASE_NAME=$(echo "$DATABASE_NAME" | tr '[:lower:]' '[:upper:]')
+    
+    DATABASE_DIR="./$DATABASE_NAME"
+    # Type 'exit' to return to the main menu
+    if [ "${DATABASE_NAME,,}" == "exit" ]; then
+        system.sh
+        break
+    # Making sure that the DB name is not an empty string
+    elif [[ -z "$DATABASE_NAME" ]]; then
+        echo "Error: Database name cannot be empty. Please enter a valid name."
+    # Making sure that there is no DB created with the same name previously
+    elif [[ -d $DATABASE_DIR ]]; then
+        echo "Database '$DATABASE_NAME' already exist."
+    # Creating the DB dir when a valid DB name is provided
+    else
+        mkdir $DATABASE_DIR
+        echo "Database '$DATABASE_NAME' has been created successfully."
+        break
+    fi
+done
+
+# Wating for the user to type 'exit' to return to the main menu
+while :; do
+    echo "Type 'exit' to return to the main menu:"
+    read EXIT
+
+    if [ "${EXIT,,}" == "exit" ]; then
+        system.sh
+        break
+    fi
+done

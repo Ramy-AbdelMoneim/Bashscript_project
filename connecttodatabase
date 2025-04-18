@@ -1,0 +1,26 @@
+#!/bin/bash
+
+# Keeping the user in loop until they enter a valid database name or typing 'exit' to return to the main menu
+
+while :; do
+    echo "Enter database name or type 'exit' to return to the main menu:"
+    read DATABASE_NAME
+    # Changing the DB name to uppercase to match it with the required DB
+    DATABASE_NAME=$(echo "$DATABASE_NAME" | tr '[:lower:]' '[:upper:]')
+
+    DATABASE_DIR="./$DATABASE_NAME"
+    # Type 'exit' to return to the main menu
+    if [ "${DATABASE_NAME,,}" == "exit" ]; then
+        system.sh
+        break
+    # Connecting to the database when a valid name is given
+    elif [ -d "$DATABASE_DIR" ]; then
+        clear
+        cd $DATABASE_DIR
+        echo "Successfully connected to the database: $DATABASE_NAME"
+        . menu.sh
+    # Printing an error messege on entering an invalid DB name
+    else
+        echo "Error: Database '$DATABASE_NAME' does not exist. Please enter a valid database name."
+    fi
+done
